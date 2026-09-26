@@ -1,0 +1,172 @@
+version: 2
+
+models:
+
+  # ------------------------------------------------------------
+  # STAGING: Calendar
+  # ------------------------------------------------------------
+  - name: stg_calendar
+    description: "Cleaned calendar data from the M5 raw calendar table."
+
+    columns:
+      - name: d
+        description: "M5 daily identifier such as d_1, d_2, etc."
+        tests:
+          - not_null
+          - unique
+
+      - name: date
+        description: "Calendar date corresponding to the M5 day identifier."
+        tests:
+          - not_null
+          - unique
+
+
+  # ------------------------------------------------------------
+  # STAGING: Sales
+  # ------------------------------------------------------------
+  - name: stg_sales
+    description: "Daily item-level sales transformed from wide format into long format."
+
+    columns:
+      - name: id
+        description: "Unique M5 product-store series identifier."
+        tests:
+          - not_null
+
+      - name: item_id
+        description: "Product identifier."
+        tests:
+          - not_null
+
+      - name: store_id
+        description: "Store identifier."
+        tests:
+          - not_null
+
+      - name: d
+        description: "M5 daily identifier."
+        tests:
+          - not_null
+
+      - name: sales
+        description: "Units sold for the item on the specified M5 day."
+        tests:
+          - not_null
+
+
+  # ------------------------------------------------------------
+  # STAGING: Sell Prices
+  # ------------------------------------------------------------
+  - name: stg_sell_prices
+    description: "Cleaned weekly selling-price data by store and item."
+
+    columns:
+      - name: store_id
+        description: "Store identifier."
+        tests:
+          - not_null
+
+      - name: item_id
+        description: "Product identifier."
+        tests:
+          - not_null
+
+      - name: wm_yr_wk
+        description: "M5 week identifier."
+        tests:
+          - not_null
+
+      - name: sell_price
+        description: "Product selling price for the store and M5 week."
+        tests:
+          - not_null
+
+
+  # ------------------------------------------------------------
+  # INTERMEDIATE: Daily Sales
+  # ------------------------------------------------------------
+  - name: int_daily_sales
+    description: "Daily analytical dataset combining sales, calendar information, and selling prices."
+
+    columns:
+      - name: item_id
+        description: "Product identifier."
+        tests:
+          - not_null
+
+      - name: store_id
+        description: "Store identifier."
+        tests:
+          - not_null
+
+      - name: date
+        description: "Calendar date."
+        tests:
+          - not_null
+
+      - name: sales
+        description: "Daily units sold."
+        tests:
+          - not_null
+
+
+  # ------------------------------------------------------------
+  # INTERMEDIATE: Weekly Sales
+  # ------------------------------------------------------------
+  - name: int_weekly_sales
+    description: "Weekly sales aggregation by product, store, department, category, and state."
+
+    columns:
+      - name: item_id
+        description: "Product identifier."
+        tests:
+          - not_null
+
+      - name: store_id
+        description: "Store identifier."
+        tests:
+          - not_null
+
+      - name: wm_yr_wk
+        description: "M5 week identifier."
+        tests:
+          - not_null
+
+      - name: total_sales
+        description: "Total units sold during the week."
+        tests:
+          - not_null
+
+
+  # ------------------------------------------------------------
+  # INTERMEDIATE: Monthly Sales
+  # ------------------------------------------------------------
+  - name: int_monthly_sales
+    description: "Monthly sales aggregation by product, store, department, category, and state."
+
+    columns:
+      - name: item_id
+        description: "Product identifier."
+        tests:
+          - not_null
+
+      - name: store_id
+        description: "Store identifier."
+        tests:
+          - not_null
+
+      - name: year
+        description: "Calendar year."
+        tests:
+          - not_null
+
+      - name: month
+        description: "Calendar month."
+        tests:
+          - not_null
+
+      - name: total_sales
+        description: "Total units sold during the month."
+        tests:
+          - not_null
