@@ -143,133 +143,208 @@ holidays = pd.concat(
 
 print(f"\nM5 calendar events loaded: {len(holidays):,}")
  
-
 # ------------------------------------------------------------
-# 7. Prophet backtesting
+# 7. Prophet forecasting function
 # ------------------------------------------------------------
 
-TEST_DAYS = 30
+def forecast_series(item_id, store_id):
+    """
+    Train and evaluate Prophet for one item/store combination.
+    """
 
-train_df = df.iloc[:-TEST_DAYS].copy()
-test_df = df.iloc[-TEST_DAYS:].copy()
+    print("\n" + "=" * 60)
+    print(f"Processing: {item_id} / {store_id}")
+    print("=" * 60)
 
-print("\nProphet backtesting")
-print(f"Training rows: {len(train_df):,}")
-print(f"Test rows: {len(test_df):,}")
+    # --------------------------------------------------------
+    # Load historical sales for this series
+    # --------------------------------------------------------
 
+    forecast_query = f"""
+    SELECT
+        date,
+        sales
+    FROM `{PROJECT_ID}.{DATASET_ID}.forecast_base`
+    WHERE
+        item_id = '{item_id}'
+        AND store_id = '{store_id}'
+    ORDER BY date
+    """
 
-# Train Prophet only on historical training data
+    series_df = client.query(forecast_query).to_dataframe()
 
-backtest_model = Prophet(
-    yearly_seasonality=True,
-    weekly_seasonality=True,
-    daily_seasonality=False,
-    holidays=holidays
-)
+    series_df["date"] = pd.to_datetime(series_df["date"])
 
-backtest_model.fit(train_df)
-
-
-# Predict the test period
-
-test_future = backtest_model.make_future_dataframe(
-    periods=TEST_DAYS,
-    freq="D"
-)
-
-test_forecast = backtest_model.predict(test_future)
-
-
-# Keep only the test-period predictions
-
-predictions = test_forecast[
-    test_forecast["ds"].isin(test_df["ds"])
-][["ds", "yhat"]].copy()
-
-predictions["yhat"] = predictions["yhat"].clip(lower=0)
-
-
-# Match predictions with actual sales
-
-evaluation = test_df[
-    ["ds", "y"]
-].merge(
-    predictions,
-    on="ds",
-    how="inner"
-)
-
-
-# Calculate MAE
-
-mae = np.mean(
-    np.abs(evaluation["y"] - evaluation["yhat"])
-)
-
-
-# Calculate RMSE
-
-rmse = np.sqrt(
-    np.mean(
-        (evaluation["y"] - evaluation["yhat"]) ** 2
+    series_df = series_df.rename(
+        columns={
+            "date": "ds",
+            "sales": "y"
+        }
     )
+
+    series_df = series_df.sort_values("ds").reset_index(drop=True)
+
+    print(f"Historical rows: {len(series_df):,}")
+
+
+    # --------------------------------------------------------
+    # Backtesting
+    # --------------------------------------------------------
+
+    TEST_DAYS = 30
+
+    train_df = series_df.iloc[:-TEST_DAYS].copy()
+    test_df = series_df.iloc[-TEST_DAYS:].copy()
+
+    backtest_model = Prophet(
+        yearly_seasonality=True,
+        weekly_seasonality=True,
+        daily_seasonality=False,
+        holidays=holidays
+    )
+
+    backtest_model.fit(train_df)
+
+    test_future = backtest_model.make_future_dataframe(
+        periods=TEST_DAYS,
+        freq="D"
+    )
+
+    test_forecast = backtest_model.predict(test_future)
+
+    predictions = test_forecast[
+        test_forecast["ds"].isin(test_df["ds"])
+    ][["ds", "yhat"]].copy()
+
+    predictions["yhat"] = predictions["yhat"].clip(lower=0)
+
+
+    # --------------------------------------------------------
+    # Compare predictions with actual values
+    # --------------------------------------------------------
+
+    evaluation = test_df[
+        ["ds", "y"]
+    ].merge(
+        predictions,
+        on="ds",
+        how="inner"
+    )
+
+    mae = np.mean(
+        np.abs(
+            evaluation["y"] - evaluation["yhat"]
+        )
+    )
+
+    rmse = np.sqrt(
+        np.mean(
+            (evaluation["y"] - evaluation["yhat"]) ** 2
+        )
+    )
+
+
+    # --------------------------------------------------------
+    # Train final model using all historical data
+    # --------------------------------------------------------
+
+    final_model = Prophet(
+        yearly_seasonality=True,
+        weekly_seasonality=True,
+        daily_seasonality=False,
+        holidays=holidays
+    )
+
+    final_model.fit(series_df)
+
+
+    # --------------------------------------------------------
+    # Generate 30-day future forecast
+    # --------------------------------------------------------
+
+    future = final_model.make_future_dataframe(
+        periods=30,
+        freq="D"
+    )
+
+    forecast = final_model.predict(future)
+
+    forecast["yhat"] = forecast["yhat"].clip(lower=0)
+    forecast["yhat_lower"] = forecast["yhat_lower"].clip(lower=0)
+    forecast["yhat_upper"] = forecast["yhat_upper"].clip(lower=0)
+
+    future_forecast = forecast.tail(30)[
+        ["ds", "yhat", "yhat_lower", "yhat_upper"]
+    ]
+
+
+    # --------------------------------------------------------
+    # Return results
+    # --------------------------------------------------------
+
+    return {
+        "item_id": item_id,
+        "store_id": store_id,
+        "mae": mae,
+        "rmse": rmse,
+        "forecast": future_forecast
+    }
+
+
+# ------------------------------------------------------------
+# 8. Run Prophet for top 3 high-volume series
+# ------------------------------------------------------------
+
+results = []
+
+for _, row in top_series.iterrows():
+
+    result = forecast_series(
+        item_id=row["item_id"],
+        store_id=row["store_id"]
+    )
+
+    results.append(result)
+
+
+# ------------------------------------------------------------
+# 9. Display evaluation summary
+# ------------------------------------------------------------
+
+evaluation_summary = pd.DataFrame([
+    {
+        "item_id": result["item_id"],
+        "store_id": result["store_id"],
+        "MAE": result["mae"],
+        "RMSE": result["rmse"]
+    }
+    for result in results
+])
+
+print("\n")
+print("=" * 60)
+print("PROPHET EVALUATION SUMMARY")
+print("=" * 60)
+
+print(
+    evaluation_summary.to_string(index=False)
 )
 
 
-print("\nProphet Evaluation Results")
-print(f"MAE:  {mae:.2f}")
-print(f"RMSE: {rmse:.2f}")
 # ------------------------------------------------------------
-# 7. Train Prophet model
+# 10. Display forecast for each series
 # ------------------------------------------------------------
 
-model = Prophet(
-    yearly_seasonality=True,
-    weekly_seasonality=True,
-    daily_seasonality=False,
-    holidays=holidays
-)
+for result in results:
 
-model.fit(df)
+    print("\n")
+    print("=" * 60)
+    print(
+        f"30-DAY FORECAST: "
+        f"{result['item_id']} / {result['store_id']}"
+    )
+    print("=" * 60)
 
-
-# ------------------------------------------------------------
-# 8. Create future dates
-# ------------------------------------------------------------
-
-future = model.make_future_dataframe(
-    periods=30,
-    freq="D"
-)
-
-
-# ------------------------------------------------------------
-# 9. Generate forecast
-# ------------------------------------------------------------
-
-forecast = model.predict(future)
-
-
-# ------------------------------------------------------------
-# 10. Display 30-day forecast
-# ------------------------------------------------------------
-
-# ------------------------------------------------------------
-# 10. Ensure demand forecasts are non-negative
-# ------------------------------------------------------------
-
-forecast["yhat"] = forecast["yhat"].clip(lower=0)
-forecast["yhat_lower"] = forecast["yhat_lower"].clip(lower=0)
-forecast["yhat_upper"] = forecast["yhat_upper"].clip(lower=0)
-
-
-# ------------------------------------------------------------
-# 11. Display 30-day forecast
-# ------------------------------------------------------------
-
-forecast_output = forecast[
-    ["ds", "yhat", "yhat_lower", "yhat_upper"]
-].tail(30)
-
-print("\n30-Day Demand Forecast:")
-print(forecast_output.to_string(index=False))
+    print(
+        result["forecast"].to_string(index=False)
+    )
