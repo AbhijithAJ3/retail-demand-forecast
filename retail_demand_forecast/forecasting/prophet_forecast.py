@@ -283,11 +283,12 @@ def forecast_series(item_id, store_id):
     # --------------------------------------------------------
 
     return {
-        "item_id": item_id,
-        "store_id": store_id,
-        "mae": mae,
-        "rmse": rmse,
-        "forecast": future_forecast
+    "item_id": item_id,
+    "store_id": store_id,
+    "mae": mae,
+    "rmse": rmse,
+    "evaluation": evaluation,
+    "forecast": future_forecast
     }
 
 
@@ -306,6 +307,99 @@ for _, row in top_series.iterrows():
 
     results.append(result)
 
+
+# ------------------------------------------------------------
+# 8. Combine forecast outputs
+# ------------------------------------------------------------
+
+forecast_outputs = []
+
+for result in results:
+
+    # Backtest predictions with actual demand
+    backtest_output = result["evaluation"].copy()
+
+    backtest_output["item_id"] = result["item_id"]
+    backtest_output["store_id"] = result["store_id"]
+    backtest_output["forecast_type"] = "backtest"
+
+    backtest_output = backtest_output.rename(
+        columns={
+            "y": "actual_demand",
+            "yhat": "predicted_demand"
+        }
+    )
+
+    backtest_output["lower_bound"] = np.nan
+    backtest_output["upper_bound"] = np.nan
+
+
+    # Future 30-day forecast
+    future_output = result["forecast"].copy()
+
+    future_output["item_id"] = result["item_id"]
+    future_output["store_id"] = result["store_id"]
+    future_output["forecast_type"] = "future"
+
+    future_output = future_output.rename(
+        columns={
+            "yhat": "predicted_demand",
+            "yhat_lower": "lower_bound",
+            "yhat_upper": "upper_bound"
+        }
+    )
+
+    future_output["actual_demand"] = np.nan
+
+
+    # Keep the same columns
+    backtest_output = backtest_output[
+        [
+            "item_id",
+            "store_id",
+            "ds",
+            "actual_demand",
+            "predicted_demand",
+            "lower_bound",
+            "upper_bound",
+            "forecast_type"
+        ]
+    ]
+
+    future_output = future_output[
+        [
+            "item_id",
+            "store_id",
+            "ds",
+            "actual_demand",
+            "predicted_demand",
+            "lower_bound",
+            "upper_bound",
+            "forecast_type"
+        ]
+    ]
+
+
+    forecast_outputs.append(backtest_output)
+    forecast_outputs.append(future_output)
+
+
+forecast_outputs = pd.concat(
+    forecast_outputs,
+    ignore_index=True
+)
+
+print("\nForecast output dataset prepared")
+print(f"Rows: {len(forecast_outputs):,}")
+
+print("\nOutput columns:")
+print(forecast_outputs.columns.tolist())
+
+print("\nForecast type counts:")
+print(
+    forecast_outputs["forecast_type"]
+    .value_counts()
+)
 
 # ------------------------------------------------------------
 # 9. Display evaluation summary
@@ -348,3 +442,60 @@ for result in results:
     print(
         result["forecast"].to_string(index=False)
     )
+
+# ------------------------------------------------------------
+# 11. Store Prophet forecast outputs in BigQuery
+# ------------------------------------------------------------
+
+OUTPUT_TABLE = f"{PROJECT_ID}.{DATASET_ID}.prophet_forecast_outputs"
+
+# Rename Prophet date column for clarity
+forecast_outputs = forecast_outputs.rename(
+    columns={"ds": "forecast_date"}
+)
+
+# Make sure date is stored as a date
+forecast_outputs["forecast_date"] = pd.to_datetime(
+    forecast_outputs["forecast_date"]
+).dt.date
+
+
+# Define BigQuery schema
+schema = [
+    bigquery.SchemaField("item_id", "STRING"),
+    bigquery.SchemaField("store_id", "STRING"),
+    bigquery.SchemaField("forecast_date", "DATE"),
+    bigquery.SchemaField("actual_demand", "FLOAT"),
+    bigquery.SchemaField("predicted_demand", "FLOAT"),
+    bigquery.SchemaField("lower_bound", "FLOAT"),
+    bigquery.SchemaField("upper_bound", "FLOAT"),
+    bigquery.SchemaField("forecast_type", "STRING"),
+]
+
+
+# Configure BigQuery load
+job_config = bigquery.LoadJobConfig(
+    schema=schema,
+    write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE
+)
+
+
+print("\nUploading forecast outputs to BigQuery...")
+
+load_job = client.load_table_from_dataframe(
+    forecast_outputs,
+    OUTPUT_TABLE,
+    job_config=job_config
+)
+
+load_job.result()
+
+print("Forecast outputs uploaded successfully!")
+print(f"Table: {OUTPUT_TABLE}")
+
+
+# Verify table
+table = client.get_table(OUTPUT_TABLE)
+
+print(f"Rows stored in BigQuery: {table.num_rows}")
+print(f"Columns stored: {len(table.schema)}")
