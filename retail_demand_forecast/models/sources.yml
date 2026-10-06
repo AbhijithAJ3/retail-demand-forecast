@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: m5_raw
+    database: gen-lang-client-0915147620
+    schema: m5_raw
+
+    tables:
+      - name: calendar
+      - name: sales_train_validation
+      - name: sales_train_evaluation
+      - name: sell_prices
