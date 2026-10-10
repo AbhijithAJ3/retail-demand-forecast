@@ -11,88 +11,39 @@ DATASET_ID = "m5_analytics"
 
 client = bigquery.Client(project=PROJECT_ID)
 
-
-# ------------------------------------------------------------
-# 2. Find high-volume item/store combinations
-# ------------------------------------------------------------
-
-top_series_query = f"""
-SELECT
-    item_id,
-    store_id,
-    SUM(sales) AS total_sales
-FROM `{PROJECT_ID}.{DATASET_ID}.forecast_base`
-GROUP BY
-    item_id,
-    store_id
-ORDER BY
-    total_sales DESC
-LIMIT 3
-"""
-
-top_series = client.query(top_series_query).to_dataframe()
-
-print("\nTop 3 high-volume item/store combinations:")
-print(top_series)
-
-
-# ------------------------------------------------------------
-# 3. Select the highest-volume series
+#---------------------------------------------------
+# 2. Select representative product/store combinations
 # ------------------------------------------------------------
 
-selected_item = top_series.iloc[0]["item_id"]
-selected_store = top_series.iloc[0]["store_id"]
+SERIES = [
+    # FOODS
+    ("FOODS_3_090", "CA_3"),
+    ("FOODS_3_586", "TX_2"),
+    ("FOODS_3_586", "TX_3"),
 
-print(f"\nSelected item: {selected_item}")
-print(f"Selected store: {selected_store}")
+    # HOBBIES
+    ("HOBBIES_1_001", "CA_1"),
+    ("HOBBIES_1_001", "TX_1"),
+    ("HOBBIES_1_002", "CA_1"),
+
+    # HOUSEHOLD
+    ("HOUSEHOLD_1_001", "CA_1"),
+    ("HOUSEHOLD_1_001", "TX_1"),
+    ("HOUSEHOLD_1_002", "CA_1"),
+]
+
+print(f"Selected {len(SERIES)} product/store combinations:")
+for item_id, store_id in SERIES:
+    print(f"  {item_id} / {store_id}")
+
 
 
 # ------------------------------------------------------------
-# 4. Load only the selected item's history
+# 3. Display selected series
 # ------------------------------------------------------------
+print("\nProphet will process all selected series.")
 
-forecast_query = f"""
-SELECT
-    date,
-    sales
-FROM `{PROJECT_ID}.{DATASET_ID}.forecast_base`
-WHERE
-    item_id = '{selected_item}'
-    AND store_id = '{selected_store}'
-ORDER BY
-    date
-"""
-
-df = client.query(forecast_query).to_dataframe()
-
-
-# ------------------------------------------------------------
-# 5. Prepare data for Prophet
-# ------------------------------------------------------------
-
-df["date"] = pd.to_datetime(df["date"])
-
-df = df.rename(
-    columns={
-        "date": "ds",
-        "sales": "y"
-    }
-)
-
-df = df.sort_values("ds").reset_index(drop=True)
-
-
-# ------------------------------------------------------------
-# 6. Display dataset information
-# ------------------------------------------------------------
-
-print("\nProphet dataset prepared successfully")
-print(f"Rows: {len(df):,}")
-print(f"Date range: {df['ds'].min()} → {df['ds'].max()}")
-
-print("\nFirst 5 rows:")
-print(df.head())
-
+ 
 
 # ------------------------------------------------------------
 # 6.5. Load M5 calendar events
@@ -292,17 +243,17 @@ def forecast_series(item_id, store_id):
     }
 
 
+
 # ------------------------------------------------------------
-# 8. Run Prophet for top 3 high-volume series
+# 8. Run Prophet for all selected product/store combinations
 # ------------------------------------------------------------
 
 results = []
 
-for _, row in top_series.iterrows():
-
+for item_id, store_id in SERIES:
     result = forecast_series(
-        item_id=row["item_id"],
-        store_id=row["store_id"]
+        item_id=item_id,
+        store_id=store_id
     )
 
     results.append(result)

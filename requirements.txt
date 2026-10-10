@@ -5,3 +5,5 @@ pyarrow
 jupyter
 lightgbm
 scikit-learn
+streamlit
+prophet

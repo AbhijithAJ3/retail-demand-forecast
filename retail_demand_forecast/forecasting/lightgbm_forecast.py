@@ -38,12 +38,26 @@ OUTPUT_TABLE = (
 TEST_DAYS = 30
 
 
-# Same top 3 series used for Prophet
+ 
+
+# Representative products across all three M5 categories
 SERIES = [
+    # FOODS
     ("FOODS_3_090", "CA_3"),
     ("FOODS_3_586", "TX_2"),
     ("FOODS_3_586", "TX_3"),
+
+    # HOBBIES
+    ("HOBBIES_1_001", "CA_1"),
+    ("HOBBIES_1_001", "TX_1"),
+    ("HOBBIES_1_002", "CA_1"),
+
+    # HOUSEHOLD
+    ("HOUSEHOLD_1_001", "CA_1"),
+    ("HOUSEHOLD_1_001", "TX_1"),
+    ("HOUSEHOLD_1_002", "CA_1"),
 ]
+
 
 
 # ---------------------------------------------------------
