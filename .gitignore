@@ -22,3 +22,16 @@ data/raw/
 # OS
 .DS_Store
 Thumbs.db
+
+# Streamlit and Python cache
+.streamlit/secrets.toml
+**/__pycache__/
+**/*.py[cod]
+
+# dbt generated files
+**/target/
+**/logs/
+
+# Virtual environments
+**/.venv/
+**/venv/

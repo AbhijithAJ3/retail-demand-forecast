@@ -3,3 +3,7 @@ numpy
 google-cloud-bigquery
 pyarrow
 jupyter
+lightgbm
+scikit-learn
+streamlit
+prophet
